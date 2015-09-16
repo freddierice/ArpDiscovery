@@ -2,7 +2,7 @@
 CC=gcc
 LD=$(CC)
 CFLAGS=-Wall
-LDFLAGS=$(CFLAGS)
+LDFLAGS=-lpcap
 TARGET=arpfind
 
 # directory structure
@@ -16,10 +16,10 @@ DIRS=$(SRC_DIR) $(BIN_DIR)
 all: $(DIRS) $(BIN_DIR)/$(TARGET)
 
 $(BIN_DIR)/$(TARGET): $(OBJS) 
-	$(LD) $(LDFLAGS) -o $@ $<
+	$(LD) -o $@ $^ $(LDFLAGS) 
 
 %.o: %.c
-	$(CC) $(CFLAGS) -o $@ -c $<
+	$(CC) $(CFLAGS) -o $@ -c $^
 
 $(DIRS):
 	mkdir -p $@
