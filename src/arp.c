@@ -20,10 +20,10 @@
  * the arp request. This is the extension copied from net/if_arp.h.
  */
 struct arpext {
-    unsigned char ar_sha;           // Sender hardware address
-    unsigned char ar_sip[ETH_ALEN]; // Sender IP address
-    unsigned char ar_tha;           // Target hardware address
-    unsigned char ar_tip[ETH_ALEN]; // Target IP address
+    unsigned char ar_sha[ETH_ALEN]; // Sender hardware address
+    unsigned char ar_sip;           // Sender IP address
+    unsigned char ar_tha[ETH_ALEN]; // Target hardware address
+    unsigned char ar_tip;           // Target IP address
 };
 
 #define BUFSIZE (sizeof(struct ether_header) + \
@@ -78,7 +78,19 @@ int send_arp(char *interface){
         return 1;
     }
     memcpy((void *)eh->ether_shost,(void *)&sockif.ifr_ifru, sizeof(struct sockaddr));
+    memcpy((void *)&ae->ar_sha,(void *)&sockif.ifr_ifru, sizeof(struct sockaddr));
     memset((void *)eh->ether_dhost,0, sizeof(struct sockaddr));
+
+    // setup the arp header
+    ah->ar_hrd = ARPHRD_ETHER;
+    ah->ar_pro = ETHERTYPE_IP;
+    ah->ar_hln = ETH_ALEN;
+    ah->ar_pln = 4; // TODO: value found in wireshark transmission. would be nice to find the 
+                    // actual constant. 
+    ah->ar_op = ARPOP_REQUEST;
+    
+    // setup the arp extension
+    // TODO: setup more intelligent addresses
 
     // send the packet
     if( sendto(sockfd, buf, BUFSIZE, 0, (struct sockaddr *)&bc_addr, sizeof(struct sockaddr_ll)) < 0 ){
