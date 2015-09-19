@@ -21,9 +21,9 @@
  */
 struct arpext {
     unsigned char ar_sha[ETH_ALEN]; // Sender hardware address
-    unsigned char ar_sip;           // Sender IP address
+    unsigned char ar_sip[0x4];      // Sender IP address
     unsigned char ar_tha[ETH_ALEN]; // Target hardware address
-    unsigned char ar_tip;           // Target IP address
+    unsigned char ar_tip[0x4];      // Target IP address
 };
 
 #define BUFSIZE (sizeof(struct ether_header) + \
@@ -77,9 +77,9 @@ int send_arp(char *interface){
         perror("Could not retrieve the hardware address from sockfd");
         return 1;
     }
-    memcpy((void *)eh->ether_shost,(void *)&sockif.ifr_ifru.ifru_hwaddr, ETH_ALEN);
-    memcpy((void *)&ae->ar_sha,(void *)&sockif.ifr_ifru.ifru_hwaddr, ETH_ALEN);
-    memset((void *)eh->ether_dhost,0, ETH_ALEN);
+    memcpy((void *)eh->ether_shost,(void *)&sockif.ifr_ifru.ifru_hwaddr.sa_data, ETH_ALEN);
+    memcpy((void *)&ae->ar_sha,(void *)&sockif.ifr_ifru.ifru_hwaddr.sa_data, ETH_ALEN);
+    memset((void *)eh->ether_dhost,0xff, ETH_ALEN); // ethernet broadcast is 0xff... 
     
     // get the ip address of 'interface'
     memset(&sockif.ifr_ifru, 0, sizeof(sockif.ifr_ifrn)); // clear out results section
@@ -87,8 +87,8 @@ int send_arp(char *interface){
         perror("Could not retrieve the hardware address from sockfd");
         return 1;
     }
-    memcpy((void *)&ae->ar_sip,(void *)&sockif.ifr_ifru.ifru_addr, 0x4); // IP addr len 0x4
-    memcpy((void *)&ae->ar_tip,(void *)&sockif.ifr_ifru.ifru_addr, 0x4); 
+    memcpy((void *)&ae->ar_sip,(void *)&sockif.ifr_ifru.ifru_addr.sa_data, 0x4); // IP addr len 0x4
+    memcpy((void *)&ae->ar_tip,(void *)&sockif.ifr_ifru.ifru_addr.sa_data, 0x4); 
 
 
     // setup the arp header
