@@ -1,7 +1,7 @@
 # general configurations
 CC=gcc
 LD=$(CC)
-CFLAGS=-Wall
+CFLAGS=-Wall -g
 LDFLAGS=-lpcap
 TARGET=arpfind
 

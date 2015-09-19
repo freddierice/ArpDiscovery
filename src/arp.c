@@ -46,15 +46,15 @@ int send_arp(char *interface){
     // setup the buffer structure
     memset(buf, 0, BUFSIZE);
     eh = (struct ether_header *)buf;
-    ah = (struct arphdr *)(buf + sizeof(eh));
-    ae = (struct arpext *)(buf + sizeof(eh) + sizeof(ah));
+    ah = (struct arphdr *)((char *)buf + sizeof(struct ether_header));
+    ae = (struct arpext *)(buf + sizeof(struct ether_header) + sizeof(struct arphdr));
     
     // setup the broadcast address 
     memset(&bc_addr, 0, sizeof(struct sockaddr_ll));
     bc_addr.sll_halen = ETH_ALEN; // set the ethernet addres length
 
     // setup ethernet headers
-    eh->ether_type = ETHERTYPE_ARP;
+    eh->ether_type = htons(ETHERTYPE_ARP);
 
     // get a RAW socket
     if ((sockfd = socket(AF_PACKET, SOCK_RAW, IPPROTO_RAW)) == -1){
@@ -73,21 +73,31 @@ int send_arp(char *interface){
 
     // get the hardware address of 'interface'
     memset(&sockif.ifr_ifru, 0, sizeof(sockif.ifr_ifrn)); // clear out results section
+    if( ioctl(sockfd, SIOCGIFHWADDR, &sockif) < 0){
+        perror("Could not retrieve the hardware address from sockfd");
+        return 1;
+    }
+    memcpy((void *)eh->ether_shost,(void *)&sockif.ifr_ifru.ifru_hwaddr, ETH_ALEN);
+    memcpy((void *)&ae->ar_sha,(void *)&sockif.ifr_ifru.ifru_hwaddr, ETH_ALEN);
+    memset((void *)eh->ether_dhost,0, ETH_ALEN);
+    
+    // get the ip address of 'interface'
+    memset(&sockif.ifr_ifru, 0, sizeof(sockif.ifr_ifrn)); // clear out results section
     if( ioctl(sockfd, SIOCGIFADDR, &sockif) < 0){
         perror("Could not retrieve the hardware address from sockfd");
         return 1;
     }
-    memcpy((void *)eh->ether_shost,(void *)&sockif.ifr_ifru, sizeof(struct sockaddr));
-    memcpy((void *)&ae->ar_sha,(void *)&sockif.ifr_ifru, sizeof(struct sockaddr));
-    memset((void *)eh->ether_dhost,0, sizeof(struct sockaddr));
+    memcpy((void *)&ae->ar_sip,(void *)&sockif.ifr_ifru.ifru_addr, 0x4); // IP addr len 0x4
+    memcpy((void *)&ae->ar_tip,(void *)&sockif.ifr_ifru.ifru_addr, 0x4); 
+
 
     // setup the arp header
-    ah->ar_hrd = ARPHRD_ETHER;
-    ah->ar_pro = ETHERTYPE_IP;
+    ah->ar_hrd = htons(ARPHRD_ETHER);
+    ah->ar_pro = htons(ETHERTYPE_IP);
     ah->ar_hln = ETH_ALEN;
-    ah->ar_pln = 4; // TODO: value found in wireshark transmission. would be nice to find the 
-                    // actual constant. 
-    ah->ar_op = ARPOP_REQUEST;
+    ah->ar_pln = 0x4; // TODO: value found in wireshark transmission. would be nice to find the 
+                      // actual constant. 
+    ah->ar_op = htons(ARPOP_REQUEST);
     
     // setup the arp extension
     // TODO: setup more intelligent addresses
@@ -97,6 +107,14 @@ int send_arp(char *interface){
         perror("Could not send the arp packet");
         return -1;
     }
+
+    // simple debugging of packets
+    printf("PACKET---\n");
+    int i;
+    for(i = 0; i < BUFSIZE; ++i){
+        printf("%2x",(unsigned char)buf[i]);
+    }
+    printf("\n---PACKET\n");
     
     return 0;
 }
