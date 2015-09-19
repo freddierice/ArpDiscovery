@@ -13,6 +13,8 @@
 #include <linux/if_packet.h> // correct according to man packet(7)
 #include <net/ethernet.h>    // for ethernet header
 
+#include <unistd.h>          // sleep in microseconds
+
 #include <pcap.h>
 
 /**
@@ -36,12 +38,14 @@ struct arpext {
 int send_arp(char *interface){
 
     char buf[BUFSIZE];
-    int sockfd;               // socket file descriptor
-    struct ifreq sockif;      // socket interface
-    struct ether_header *eh;  // ethernet packet header
-    struct arphdr *ah;        // arp header
-    struct arpext *ae;        // arp extension
-    struct sockaddr_ll bc_addr;  // broadcast address
+    int sockfd;                 // socket file descriptor
+    struct ifreq sockif;        // socket interface
+    struct ether_header *eh;    // ethernet packet header
+    struct arphdr *ah;          // arp header
+    struct arpext *ae;          // arp extension
+    struct sockaddr_ll bc_addr; // broadcast address
+    uint32_t start_ip, end_ip;  // start and end ip addresses
+    uint32_t ip_iter;           // iterator for the ip addresses
 
     // setup the buffer structure
     memset(buf, 0, BUFSIZE);
@@ -64,7 +68,7 @@ int send_arp(char *interface){
     
     // get the interface index
     memset(&sockif, 0, sizeof(struct ifreq));
-    strncpy(sockif.ifr_name, interface, IFNAMSIZ-1);
+    strncpy(sockif.ifr_name, interface, IFNAMSIZ-1); 
     if (ioctl(sockfd, SIOCGIFINDEX, &sockif)) {
         perror("Could find the interface");
         return -1;
@@ -80,6 +84,7 @@ int send_arp(char *interface){
     memcpy((void *)eh->ether_shost,(void *)&sockif.ifr_ifru.ifru_hwaddr.sa_data, ETH_ALEN);
     memcpy((void *)&ae->ar_sha,(void *)&sockif.ifr_ifru.ifru_hwaddr.sa_data, ETH_ALEN);
     memset((void *)eh->ether_dhost,0xff, ETH_ALEN); // ethernet broadcast is 0xff... 
+    memset((void *)&ae->ar_tha,0xff, ETH_ALEN); // arp broadcast is 0xff...
     
     // get the ip address of 'interface'
     memset(&sockif.ifr_ifru, 0, sizeof(sockif.ifr_ifrn)); // clear out results section
@@ -87,9 +92,25 @@ int send_arp(char *interface){
         perror("Could not retrieve the hardware address from sockfd");
         return 1;
     }
-    memcpy((void *)&ae->ar_sip,(void *)&sockif.ifr_ifru.ifru_addr.sa_data, 0x4); // IP addr len 0x4
-    memcpy((void *)&ae->ar_tip,(void *)&sockif.ifr_ifru.ifru_addr.sa_data, 0x4); 
+    // IP has length 4 for ipv4 
+    memcpy((void *)&ae->ar_sip,(void *)
+            &(((struct sockaddr_in *)&sockif.ifr_ifru.ifru_addr)->sin_addr), 0x4);
+    // memcpy((void *)&ae->ar_tip,(void *)
+    //        &(((struct sockaddr_in *)&sockif.ifr_ifru.ifru_addr)->sin_addr), 0x4);
+    ae->ar_tip[0] = 0x8a; ae->ar_tip[1] = 0x10; ae->ar_tip[2] = 0x1a; ae->ar_tip[3] = 0x1;
 
+    // get the subnet mask
+    memset(&sockif.ifr_ifru, 0, sizeof(sockif.ifr_ifrn)); // clear out results section
+    if( ioctl(sockfd, SIOCGIFNETMASK, &sockif) < 0){
+        perror("Could not retrieve the hardware address from sockfd");
+        return 1;
+    }
+    memcpy((void *)&(start_ip),(void *)
+            &(((struct sockaddr_in *)&sockif.ifr_ifru.ifru_netmask)->sin_addr), 0x4);
+    end_ip = start_ip;
+    start_ip &= *((uint32_t *)&ae->ar_sip);
+    start_ip = ntohl(start_ip) + 1;
+    end_ip = ~(ntohl(end_ip)) - 1 + start_ip;
 
     // setup the arp header
     ah->ar_hrd = htons(ARPHRD_ETHER);
@@ -101,11 +122,18 @@ int send_arp(char *interface){
     
     // setup the arp extension
     // TODO: setup more intelligent addresses
+    
+    // start ip loop
+    for(ip_iter = start_ip; ip_iter < end_ip; ++ip_iter){
+        // change target ip
+        *(uint32_t *)&ae->ar_tip = htonl(ip_iter);
 
-    // send the packet
-    if( sendto(sockfd, buf, BUFSIZE, 0, (struct sockaddr *)&bc_addr, sizeof(struct sockaddr_ll)) < 0 ){
-        perror("Could not send the arp packet");
-        return -1;
+        // send the packet
+        if( sendto(sockfd, buf, BUFSIZE, 0, (struct sockaddr *)&bc_addr, sizeof(struct sockaddr_ll)) < 0 ){
+            perror("Could not send the arp packet");
+            return -1;
+        }
+        usleep(10);
     }
 
     // simple debugging of packets
