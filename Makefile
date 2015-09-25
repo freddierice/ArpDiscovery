@@ -25,4 +25,4 @@ $(DIRS):
 	mkdir -p $@
 
 clean: 
-	rm -r $(BIN_DIR) $(OBJS)
+	rm -rf $(BIN_DIR) $(OBJS)
