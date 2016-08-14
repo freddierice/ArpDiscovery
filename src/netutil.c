@@ -20,6 +20,7 @@
 
 #include "netutil.h"
 
+// the socket interface used for this library.
 struct ifreq sockif;
 
 /**

@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <inttypes.h>
 #include <unistd.h>
+#include <string.h>
 
 #include "util.h"
 
@@ -34,4 +36,59 @@ int sysarp_set(const char *iplink_path, const char *interface, int flag){
     }
 
     return err;
+}
+
+int ip2uint32t(const char *ip, uint32_t *ret){
+
+    return 0;
+}
+
+/**
+ * Converts an ip range into a starting and ending ip address (uint32_t)
+ */
+int parse_ip(const char *iprange, uint32_t *start, uint32_t *end){
+    
+    int dash_flag = 0;
+    char *iter;
+    uint32_t ip1, ip2, ip3, ip4;
+
+    // check for NULL ip range
+    if(!iprange)
+        return -1;
+
+    // the length has to make sense
+    if(strlen(iprange) > 31)
+        return -1;
+
+    // initialize the start and end ip addresses for convenience
+    *start = *end = 0;
+
+    // check for ok iprange format
+    for(iter = (char *)iprange; *iter; ++iter){
+        // only allow these characters
+        if( (*iter < '0' || *iter > '9') && *iter != '.' && *iter != '-' )
+            return -1;
+        if(*iter == '-'){
+            dash_flag++; 
+            continue;
+        }
+    }
+
+    // convert the ip addresses to uint32_t types. 
+    if(dash_flag == 0){
+        if( sscanf(iprange,"%u.%u.%u.%u", &ip1, &ip2, &ip3, &ip4) <= 0 )
+            return -1;
+        *start = (ip1 << 0x18) + (ip2 << 0x10) + (ip3 << 0x8) + ip4;
+
+    }else if(dash_flag == 1){
+        if( sscanf(iprange,"%u.%u.%u.%u", &ip1, &ip2, &ip3, &ip4) <= 0 )
+            return -1;
+        *start = (ip1 << 0x18) + (ip2 << 0x10) + (ip3 << 0x8) + ip4;
+        
+    }else{
+        // this should not happen.
+        return -1;
+    }
+    
+    return 0;
 }

@@ -37,7 +37,7 @@ struct arpext {
 /**
  * Sends arp messages to obtain mac addresses
  */
-int send_arp(char *interface){
+int send_arp(char *interface, uint32_t start_ip, uint32_t end_ip, int delay){
 
     char buf[BUFSIZE];
     int sockfd;                 // socket file descriptor
@@ -45,8 +45,9 @@ int send_arp(char *interface){
     struct arphdr *ah;          // arp header
     struct arpext *ae;          // arp extension
     struct sockaddr_ll bc_addr; // broadcast address
-    uint32_t start_ip, end_ip;  // start and end ip addresses
     uint32_t ip_iter;           // iterator for the ip addresses
+	uint32_t ip_subnet_start; 	// start and ends to the ip subnet
+	uint32_t ip_subnet_end; 	
 
     // setup the buffer structure
     memset(buf, 0, BUFSIZE);
@@ -87,8 +88,18 @@ int send_arp(char *interface){
 
     // get the subnet mask
     if( netutil_interface_subnet(interface, sockfd, *((uint32_t *)ae->ar_sip), 
-                &start_ip, &end_ip) < 0)
+                &ip_subnet_start, &ip_subnet_end) < 0)
         return -1;
+
+	// make sure the range is legit
+	if( start_ip == 0 )
+		start_ip = ip_subnet_start;
+	if( end_ip == 0 )
+		end_ip = ip_subnet_end;
+
+	// make sure the delay is legit
+	if( delay == 0 )
+		delay = 100;
 
     // setup the arp header
     ah->ar_hrd = htons(ARPHRD_ETHER);
@@ -111,7 +122,7 @@ int send_arp(char *interface){
             perror("Could not send the arp packet");
             return -1;
         }
-        usleep(100);
+        usleep(delay);
     }
 
 //  // simple debugging of packets

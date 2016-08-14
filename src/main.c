@@ -5,6 +5,10 @@
 #include <net/if.h> // for IFNAMSIZ
 #include <pthread.h> // for pthreads
 
+#include <sys/socket.h> // for inet_addr
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
 #include <sys/types.h> // stat and geteuid
 #include <sys/stat.h>
 #include <unistd.h>
@@ -26,23 +30,35 @@ char iplink_path[MAX_PATHLEN+1] = "/bin/ip";
 
 int main(int argc, char **argv){
 
+    int err = 0;
     char c;
+	uint32_t start_ip = 0, end_ip = 0;
+	int delay = 100;
 
     struct option opts[] = {
-        {"ip", 1, NULL, 'i'},
-        {"range", 1, NULL, 'r'},
+        {"start", 1, NULL, 's'},
+        {"end", 1, NULL, 'e'},
+        {"delay", 1, NULL, 'd'},
     };
 
 /**
  * Get the options for the program
  */
-    while(((c = getopt_long(argc, argv, "i:r:R:", opts, NULL)) != (char)-1) ){
+    while(((c = getopt_long(argc, argv, "s:S:e:E:d:D", opts, NULL)) != (char)-1) ){
         switch(c){
-            case 'i': 
-                strncpy(iplink_path, optarg, MAX_PATHLEN);
-                break;
+			case 's':
+				start_ip = ntohl((uint32_t)inet_addr(optarg));
+				break;
+			case 'e':
+				end_ip = ntohl((uint32_t)inet_addr(optarg));
+				break;
+			case 'd':
+				delay = atoi(optarg);
+				break;
             default:
                 fprintf(stderr, "Unkown option %c\n", c);
+				printusage(argc, argv);
+				exit(1);
         }
     }
 
@@ -66,40 +82,40 @@ int main(int argc, char **argv){
 /**
  * Done checking the inputs! Start the program logic
  */
-    printf("Starting %s\n",argv[0]);
-    
     // set the ip utility
     if(sysarp_set(iplink_path,interface,0) < 0){
         fprintf(stderr, "Error pausing the system ARP replies.\n");
-        goto cleanup;
+        err = 1; goto cleanup;
     }
 
-    if( send_arp(interface) < 0 ){
+	//debugging: printf("doing send_arp on %s with %u, %u, and %u\n", interface, start_ip, end_ip, delay);
+
+	printf("starting... ");
+    if( send_arp(interface, start_ip, end_ip, delay) < 0 ){
         fprintf(stderr, "Error sending ARPs on the interface.\n");
-        goto cleanup;
+        err = 1; goto cleanup;
     }
-
-    printf("Completed succesfully\n");
-    sleep(10);
+	printf("done!\n");
 
 cleanup:
     if(sysarp_set(iplink_path,interface,1) < 0){
         fprintf(stderr, "Could not resume the system ARP replies\n");
     }
-    return 0;
+    return err;
 }
 
 void printusage(int argc, char **argv){
     // check inputs
     if(argc != 2){
-        fprintf(stderr, "ArpDiscovery %d.%d\n" \
-        "Usage: %s [--ip, -i] <interface name>\n" \
+        fprintf(stderr, "arp-discovery %d.%d\n" \
+        "Usage: %s [-s, -e, -d] <interface name>\n" \
         "OPTIONS:\n" \
-        "  --range/-r\t\t\t give bounds on the subnet\n" \
-        "  --ip/-i\t\t\t use a non-default location of ip\n" \
+        "  --start/-s\t\t\t give a start address to search\n" \
+        "  --end/-e\t\t\t give an end address to search\n" \
+        "  --delay/-d\t\t\t the delay between each arp send (default 100)\n" \
         "EXAMPLES:\n" \
         "  %s wlan0\n" \
-        "  %s --ip /bin/ip wlan0\n", VERSION_MAJOR, VERSION_MINOR, argv[0], argv[0],
+        "  %s -s \"192.168.0.1\" wlan0\n", VERSION_MAJOR, VERSION_MINOR, argv[0], argv[0],
         argv[0]);
     }
 }
